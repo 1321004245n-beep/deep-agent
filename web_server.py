@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -88,9 +89,16 @@ def _sessions_conn() -> sqlite3.Connection:
             title TEXT NOT NULL DEFAULT '新会话',
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
-            messages TEXT NOT NULL DEFAULT '[]'
+            messages TEXT NOT NULL DEFAULT '[]',
+            deleted_at INTEGER NOT NULL DEFAULT 0
         )"""
     )
+    # 老库迁移: 补 deleted_at 列（软删除标记, 0=未删除）
+    try:
+        conn.execute("ALTER TABLE sessions ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 列已存在
     return conn
 
 
@@ -102,6 +110,7 @@ def _row_to_session(row: tuple) -> dict[str, Any]:
         "created_at": row[3],
         "updated_at": row[4],
         "messages": json.loads(row[5] or "[]"),
+        "deleted_at": row[6],
     }
 
 
@@ -116,11 +125,29 @@ class SessionSync(BaseModel):
 
 @app.get("/api/sessions")
 def list_sessions() -> list[dict[str, Any]]:
-    """会话列表（不含消息体, 按最近更新倒序）。"""
+    """会话列表（不含消息体, 按最近更新倒序, 排除已删除）。"""
     conn = _sessions_conn()
     try:
-        rows = conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC").fetchall()
-        return [{k: v for k, v in _row_to_session(r).items() if k != "messages"} for r in rows]
+        rows = conn.execute(
+            "SELECT * FROM sessions WHERE deleted_at=0 ORDER BY updated_at DESC"
+        ).fetchall()
+        return [{k: v for k, v in _row_to_session(r).items() if k not in ("messages", "deleted_at")} for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/api/sessions/deleted")
+def list_deleted_sessions() -> list[dict[str, Any]]:
+    """已删除会话的 id 列表（tombstone, 供其他客户端清理本地缓存, 防止复活）。
+
+    注意: 必须注册在 /api/sessions/{session_id} 之前, 避免路由冲突。
+    """
+    conn = _sessions_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, deleted_at FROM sessions WHERE deleted_at>0 ORDER BY deleted_at DESC"
+        ).fetchall()
+        return [{"id": r[0], "deleted_at": r[1]} for r in rows]
     finally:
         conn.close()
 
@@ -131,25 +158,39 @@ def get_session(session_id: str) -> dict[str, Any]:
     conn = _sessions_conn()
     try:
         row = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
-        return _row_to_session(row) if row else {"error": "not found"}
+        if not row:
+            return {"error": "not found"}
+        data = _row_to_session(row)
+        if data["deleted_at"]:
+            return {"error": "deleted"}
+        return data
     finally:
         conn.close()
 
 
 @app.post("/api/sessions/sync")
 def sync_session(req: SessionSync) -> dict[str, Any]:
-    """创建/更新会话（upsert 元数据 + 消息快照）。"""
+    """创建/更新会话（upsert 元数据 + 消息快照）。
+
+    防复活: 若该会话已被软删除, 且本次同步的 updated_at 早于删除时间
+    （说明是旧客户端缓存的过时数据）→ 拒绝; 若晚于删除时间（删除后
+    确实产生了新活动）→ 接受并恢复。
+    """
     conn = _sessions_conn()
     try:
+        row = conn.execute("SELECT deleted_at FROM sessions WHERE id=?", (req.id,)).fetchone()
+        if row and row[0] > 0 and req.updated_at < row[0]:
+            return {"ok": False, "reason": "deleted"}
         conn.execute(
-            """INSERT INTO sessions (id, thread_id, title, created_at, updated_at, messages)
-               VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO sessions (id, thread_id, title, created_at, updated_at, messages, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, 0)
                ON CONFLICT(id) DO UPDATE SET
                  thread_id=excluded.thread_id,
                  title=excluded.title,
                  created_at=excluded.created_at,
                  updated_at=excluded.updated_at,
-                 messages=excluded.messages""",
+                 messages=excluded.messages,
+                 deleted_at=0""",
             (
                 req.id,
                 req.thread_id,
@@ -167,11 +208,18 @@ def sync_session(req: SessionSync) -> dict[str, Any]:
 
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str) -> dict[str, Any]:
-    """删除会话元数据, 并尽力清理 checkpointer 中对应 thread。"""
+    """软删除会话（tombstone 标记）, 并尽力清理 checkpointer 中对应 thread。
+
+    软删除而非物理删除: 其他客户端 bootstrap 时通过 /api/sessions/deleted
+    发现删除操作, 同步清理本地缓存, 避免"复活"。
+    """
     conn = _sessions_conn()
     try:
         row = conn.execute("SELECT thread_id FROM sessions WHERE id=?", (session_id,)).fetchone()
-        conn.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+        conn.execute(
+            "UPDATE sessions SET deleted_at=? WHERE id=? AND deleted_at=0",
+            (int(time.time() * 1000), session_id),
+        )
         conn.commit()
         if row:
             _purge_thread(row[0])

@@ -111,6 +111,12 @@
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     },
+    // 已删除会话 id 列表 (tombstone): 其他客户端据此清理本地缓存, 防复活
+    async deleted() {
+      const r = await fetch("/api/sessions/deleted");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
   };
 
   // 服务端字段 → 前端会话对象
@@ -128,9 +134,25 @@
   // 启动引导: 服务端为主, 本地 localStorage 为缓存, 按更新时间双向合并
   async function bootstrapSessions() {
     loadSessions();
-    let server;
-    try { server = await api.list(); }
-    catch { return; } // 服务端不可用则用本地缓存
+    let server, deleted;
+    try {
+      [server, deleted] = await Promise.all([api.list(), api.deleted()]);
+    } catch { return; } // 服务端不可用则用本地缓存
+
+    const delIds = new Set((deleted || []).map((d) => d.id));
+
+    // 其他端已删除的会话: 本地同步清理（防止"复活"）
+    if (delIds.size) {
+      const before = sessions.length;
+      sessions = sessions.filter((s) => !delIds.has(s.id));
+      if (sessions.length !== before) {
+        if (currentId && delIds.has(currentId)) {
+          currentId = sessions.length ? sessions[0].id : null; // 正在看的会话被删 → 切换
+        }
+        saveSessions();
+      }
+    }
+
     const serverById = new Map(server.map((s) => [s.id, s]));
     const localById = new Map(sessions.map((s) => [s.id, s]));
 
@@ -157,9 +179,10 @@
         try { await api.sync(local); } catch { /* 忽略 */ }
       }
     }
-    // 本地有、服务端没有 → 上传迁移
+    // 本地有、服务端没有 → 上传迁移（已被删除的旧数据不推回, 防复活）
     for (const s of sessions) {
       if (serverById.has(s.id)) continue;
+      if (delIds.has(s.id)) continue;
       try { await api.sync(s); } catch { /* 忽略 */ }
     }
     saveSessions();
