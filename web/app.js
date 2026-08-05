@@ -988,7 +988,8 @@
   }
   inputEl.addEventListener("input", () => { autoResize(); updateSendState(); });
   inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    // keyCode 229 = 输入法组合中 (某些浏览器/输入法下 isComposing 判断不准)
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       submit();
     }
