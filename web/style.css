@@ -980,12 +980,12 @@ body::after {
 
 .input-wrap {
   display: flex;
-  align-items: flex-end;   /* 模型选择与发送按钮固定贴底, 换行不影响位置 */
-  gap: 10px;
+  flex-direction: column;   /* 文字输入区在上, 工具栏固定在下 */
+  gap: 6px;
   background: var(--card);
   border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-xl);
-  padding: 10px 10px 10px 14px;
+  padding: 12px 12px 10px;
   box-shadow: var(--shadow-md);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -994,8 +994,29 @@ body::after {
   box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.13), var(--shadow-md);
 }
 
+/* 底部工具栏: 左侧附件+模型, 右侧发送按钮, 固定贴底 */
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  flex-shrink: 0;
+}
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 #input {
-  flex: 1;
+  width: 100%;
   border: none;
   outline: none;
   background: transparent;
@@ -1005,7 +1026,7 @@ body::after {
   line-height: 1.6;
   resize: none;
   max-height: 150px;
-  padding: 6px 0;
+  padding: 4px 2px;
 }
 #input::placeholder { color: var(--text-faint); }
 
