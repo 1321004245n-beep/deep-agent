@@ -1,0 +1,20 @@
+# Deep Agent Web Chat - systemd 服务单元
+# 安装: sudo cp deep-agent.service /etc/systemd/system/ && sudo systemctl daemon-reload
+# 启用: sudo systemctl enable --now deep-agent
+# 查看日志: journalctl -u deep-agent -f
+
+[Unit]
+Description=Deep Agent Web Chat
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/deep-agent
+ExecStart=/opt/deep-agent/.venv/bin/python web_server.py --port 8000
+Restart=always
+RestartSec=3
+# 环境变量从 /opt/deep-agent/.env 读取（Key 不写入本文件）
+EnvironmentFile=/opt/deep-agent/.env
+
+[Install]
+WantedBy=multi-user.target
