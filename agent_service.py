@@ -40,6 +40,7 @@ from langchain.agents.middleware.types import (
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
 from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI  # 智谱 GLM (OpenAI 兼容接口)
 from deepagents import create_deep_agent
 
 # ---------------------------------------------------------------------------
@@ -508,23 +509,40 @@ def build_agent(
         可直接 .invoke() / .stream() 调用的 CompiledStateGraph agent。
     """
     load_env_file()
-    key = api_key or os.getenv("DEEPSEEK_API_KEY")
-    if not key:
-        print(
-            "\n⚠️  未检测到 DeepSeek API Key!\n"
-            "    请设置环境变量 DEEPSEEK_API_KEY（或 --api-key 传入），例如:\n"
-            "    export DEEPSEEK_API_KEY=sk-xxxxxxxx\n"
-            "    服务仍可构建, 但调用模型时会报错。\n"
-        )
-        # 占位 Key: 仅保证 agent 可构建, 实际调用会因认证失败给出明确报错
-        key = "sk-placeholder-please-set-DEEPSEEK_API_KEY"
-
+    # 模型路由: glm-* → 智谱 (ChatOpenAI 兼容), 其余 → DeepSeek
     model_name = model or os.getenv("DEEPSEEK_MODEL") or DEFAULT_MODEL
-    model_instance = ChatDeepSeek(
-        model=model_name,
-        temperature=temperature,
-        api_key=key,
-    )
+    if model_name.startswith("glm-"):
+        glm_key = os.getenv("GLM_API_KEY")
+        if not glm_key:
+            print(
+                "\n⚠️  未检测到智谱 GLM API Key!\n"
+                "    请设置环境变量 GLM_API_KEY, 例如:\n"
+                "    export GLM_API_KEY=xxxxxxxx.xxxxxxxx\n"
+                "    服务仍可构建, 但调用模型时会报错。\n"
+            )
+            glm_key = "placeholder-glm-api-key"
+        model_instance = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            api_key=glm_key,
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+        )
+    else:
+        key = api_key or os.getenv("DEEPSEEK_API_KEY")
+        if not key:
+            print(
+                "\n⚠️  未检测到 DeepSeek API Key!\n"
+                "    请设置环境变量 DEEPSEEK_API_KEY（或 --api-key 传入），例如:\n"
+                "    export DEEPSEEK_API_KEY=sk-xxxxxxxx\n"
+                "    服务仍可构建, 但调用模型时会报错。\n"
+            )
+            # 占位 Key: 仅保证 agent 可构建, 实际调用会因认证失败给出明确报错
+            key = "sk-placeholder-please-set-DEEPSEEK_API_KEY"
+        model_instance = ChatDeepSeek(
+            model=model_name,
+            temperature=temperature,
+            api_key=key,
+        )
 
     # 会话持久化: 默认 SQLite checkpointer（同步版, 兼容 CLI）
     if checkpointer is None:
