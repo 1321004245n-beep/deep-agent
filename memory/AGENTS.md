@@ -6,7 +6,7 @@
 ## 项目概览
 
 - **项目**: Deep Agent Web Chat —— 基于 deepagents 0.7.4 的智能体对话系统
-- **模型**: DeepSeek `deepseek-v4-flash`（key 在 `.env`，勿外泄）
+- **模型**: 支持多模型切换（默认 `deepseek-v4-flash`；可选 `deepseek-chat` / `deepseek-reasoner` / `glm-5.2` 智谱）。DeepSeek key 在 `.env` 的 `DEEPSEEK_API_KEY`，智谱 key 在 `GLM_API_KEY`（均勿外泄）。底层模型由当前切换决定，不要断言自己是某个固定模型
 - **栈**: FastAPI + uvicorn (SSE 流式) / 原生 HTML+CSS+JS 前端 / LangGraph
 - **入口**: `web_server.py` 启动服务 (默认 0.0.0.0:8000)，前端在 `web/`
 - **Agent 构建**: `agent_service.py` 的 `build_agent()`，复用点
@@ -33,7 +33,7 @@
 - 联网搜索 web_search、网页抓取 fetch_webpage、日期时间感知
 - 长期记忆自动沉淀、AGENTS.md 记忆注入、会话保存（thread 恢复）
 - 技能库 skills/（code-review / debugging / git-workflow）
-- 模型切换（deepseek-v4-flash / deepseek-chat / deepseek-reasoner）
+- 模型切换（deepseek-v4-flash / deepseek-chat / deepseek-reasoner / glm-5.2）
 
 ## 待办/方向
 

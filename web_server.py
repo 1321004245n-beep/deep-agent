@@ -45,7 +45,7 @@ MAX_HISTORY_ROUNDS = 10  # 无 thread_id 时回退用的历史轮数上限
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 附件大小上限 5MB
 
 # 可用模型注册表（首项为默认）
-MODEL_REGISTRY = ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "glm-4-flash"]
+MODEL_REGISTRY = ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "glm-5.2"]
 DEFAULT_MODEL = MODEL_REGISTRY[0]
 
 # agent 池: 按模型名缓存实例（共享 checkpointer/store/backend 连接）
