@@ -33,6 +33,7 @@ from pydantic import BaseModel
 
 from agent_service import (
     CHECKPOINT_DB_PATH,
+    MCPManager,
     build_agent,
     create_async_checkpointer,
 )
@@ -51,15 +52,23 @@ DEFAULT_MODEL = MODEL_REGISTRY[0]
 # agent 池: 按模型名缓存实例（共享 checkpointer/store/backend 连接）
 agents: dict[str, Any] = {}
 _checkpointer = None
+_mcp_manager: MCPManager | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """应用生命周期: 预构建默认模型 agent, 其余按需构建; 关闭时释放连接。"""
-    global _checkpointer
+    global _checkpointer, _mcp_manager
     _checkpointer = await create_async_checkpointer()
-    agents[DEFAULT_MODEL] = build_agent(model=DEFAULT_MODEL, checkpointer=_checkpointer)
+    # 启动 MCP 服务器连接（mcp_servers.json 配置; 失败不影响服务启动）
+    _mcp_manager = MCPManager()
+    await _mcp_manager.start()
+    agents[DEFAULT_MODEL] = build_agent(
+        model=DEFAULT_MODEL, checkpointer=_checkpointer, mcp_tools=_mcp_manager.tools
+    )
     yield
+    if _mcp_manager:
+        await _mcp_manager.stop()
     await _checkpointer.conn.close()
 
 
@@ -69,11 +78,25 @@ def get_agent(model: str) -> Any:
     if model not in MODEL_REGISTRY:
         model = DEFAULT_MODEL
     if model not in agents:
-        agents[model] = build_agent(model=model, checkpointer=_checkpointer)
+        agents[model] = build_agent(
+            model=model, checkpointer=_checkpointer, mcp_tools=_mcp_manager.tools if _mcp_manager else None
+        )
     return agents[model]
 
 
 app = FastAPI(title="Deep Agent Web Chat", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+@app.get("/api/mcp-status")
+def mcp_status() -> dict[str, Any]:
+    """MCP 连接状态（供前端显示徽标）。"""
+    if not _mcp_manager:
+        return {"enabled": False, "tools": 0, "servers": []}
+    return {
+        "enabled": len(_mcp_manager._connections) > 0,
+        "tools": len(_mcp_manager.tools),
+        "servers": list(_mcp_manager._connections.keys()),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -1053,6 +1053,15 @@
 
   // ---------- 启动 ----------
   (async () => {
+    // 0) 查询 MCP 连接状态, 显示徽标
+    try {
+      const ms = await fetch("/api/mcp-status").then((r) => r.json());
+      const badge = document.getElementById("mcp-badge");
+      if (badge && ms && ms.enabled && ms.tools > 0) {
+        badge.textContent = `MCP ${ms.tools} 工具`;
+        badge.hidden = false;
+      }
+    } catch { /* 忽略 */ }
     // 1) 从服务端恢复会话列表（本地缓存兜底 + 双向合并迁移）
     await bootstrapSessions();
     // 2) 没有任何会话则新建一个

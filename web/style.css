@@ -1117,3 +1117,30 @@ body::after {
   .hint { font-size: 10.5px; }
   .header { padding-top: 12px; }
 }
+
+/* MCP 徽标: 工具栏左侧, 表示外部工具已连接 */
+.mcp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+  white-space: nowrap;
+  cursor: default;
+}
+.mcp-badge::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #16a34a;
+  animation: mcp-pulse 2s ease-in-out infinite;
+}
+@keyframes mcp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
