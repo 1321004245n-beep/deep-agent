@@ -1053,16 +1053,6 @@
 
   // ---------- 启动 ----------
   (async () => {
-    // 0) 查询 MCP 连接状态, 显示徽标 + 绑定点击弹窗
-    try {
-      const ms = await fetch("/api/mcp-status").then((r) => r.json());
-      const badge = document.getElementById("mcp-badge");
-      if (badge && ms && ms.enabled && ms.tools > 0) {
-        badge.textContent = `MCP ${ms.tools} 工具`;
-        badge.hidden = false;
-        badge.addEventListener("click", () => showMcpModal(ms));
-      }
-    } catch { /* 忽略 */ }
     // 1) 从服务端恢复会话列表（本地缓存兜底 + 双向合并迁移）
     await bootstrapSessions();
     // 2) 没有任何会话则新建一个
@@ -1086,47 +1076,4 @@
     updateSendState();
     inputEl.focus();
   })();
-
-  // ---------- MCP 工具详情弹窗 ----------
-  function showMcpModal(data) {
-    const modal = document.getElementById("mcp-modal");
-    const body = document.getElementById("mcp-modal-body");
-    if (!modal || !body) return;
-    if (data && Array.isArray(data.details) && data.details.length) {
-      let html = "";
-      for (const t of data.details) {
-        const argChips = Object.entries(t.args || {})
-          .map(([k, v]) =>
-            `<span class="mcp-arg-chip"><b>${escapeHtml(k)}</b>` +
-            `${v.required ? ' <span class="req">*</span>' : ""}</span>`
-          )
-          .join("");
-        html +=
-          `<div class="mcp-tool-card">` +
-          `<div class="mcp-tool-name">${escapeHtml(t.name)}</div>` +
-          (t.description ? `<div class="mcp-tool-desc">${escapeHtml(t.description)}</div>` : "") +
-          (argChips ? `<div class="mcp-tool-args">${argChips}</div>` : "") +
-          `</div>`;
-      }
-      body.innerHTML = html;
-    } else {
-      body.innerHTML = `<div class="mcp-modal-empty">没有已连接的工具</div>`;
-    }
-    modal.hidden = false;
-    document.addEventListener("keydown", mcpModalKeyHandler);
-  }
-
-  function mcpModalKeyHandler(e) {
-    if (e.key === "Escape") closeMcpModal();
-  }
-
-  function closeMcpModal() {
-    const modal = document.getElementById("mcp-modal");
-    if (modal) modal.hidden = true;
-    document.removeEventListener("keydown", mcpModalKeyHandler);
-  }
-
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("[data-mcp-close]")) closeMcpModal();
-  });
 })();

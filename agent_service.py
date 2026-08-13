@@ -43,16 +43,6 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_openai import ChatOpenAI  # 智谱 GLM (OpenAI 兼容接口)
 from deepagents import create_deep_agent
 
-# MCP (Model Context Protocol) 支持
-import json  # noqa: E402
-import asyncio  # noqa: E402
-from typing import Any as _Any  # noqa: E402
-from langchain_mcp_adapters.tools import load_mcp_tools  # noqa: E402
-from langchain_mcp_adapters.sessions import (  # noqa: E402
-    StdioConnection,
-    StreamableHttpConnection,
-)
-
 # ---------------------------------------------------------------------------
 # 配置: 模型与 Key 通过 .env 文件或环境变量注入
 #   .env 示例见 .env.example; 实际 .env 已被 .gitignore 忽略, 不会泄露
@@ -61,81 +51,6 @@ DEFAULT_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")  # 当前: deepseek
 DEFAULT_TEMPERATURE = 0.7
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_FILE = os.path.join(BASE_DIR, ".env")
-MCP_CONFIG_PATH = os.path.join(BASE_DIR, "mcp_servers.json")
-
-
-class MCPManager:
-    """管理 MCP 服务器连接与会话生命周期（stdio / streamable-http 两种传输）。
-
-    用法:
-        mgr = MCPManager()
-        await mgr.start()          # 连接所有配置的 MCP 服务器并加载工具
-        build_agent(..., mcp_tools=mgr.tools)
-        await mgr.stop()           # 服务关闭时释放连接
-    """
-
-    def __init__(self, config_path: str = MCP_CONFIG_PATH):
-        self.config_path = config_path
-        self.tools: list[Any] = []          # 全部 MCP 工具（供 agent 注入）
-        self._connections: dict[str, Any] = {}  # name -> connection 配置
-        self._timeout = float(os.getenv("MCP_CONNECT_TIMEOUT", "25"))
-
-    async def start(self) -> None:
-        if not os.path.exists(self.config_path):
-            print("ℹ️  未找到 mcp_servers.json, MCP 能力未启用")
-            return
-        try:
-            with open(self.config_path, encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception as e:
-            print(f"⚠️  mcp_servers.json 解析失败: {e}")
-            return
-        servers = config.get("mcp_servers", {})
-        if not servers:
-            print("ℹ️  mcp_servers.json 无服务器配置, MCP 能力未启用")
-            return
-        for name, cfg in servers.items():
-            try:
-                async def _connect(cfg=cfg):
-                    if cfg.get("transport") == "http":
-                        connection = StreamableHttpConnection(
-                            transport="streamable-http",
-                            url=cfg["url"],
-                            headers=cfg.get("headers"),
-                        )
-                    else:
-                        connection = StdioConnection(
-                            transport="stdio",
-                            command=cfg["command"],
-                            args=cfg.get("args", []),
-                            env=cfg.get("env"),
-                        )
-                    tools = await load_mcp_tools(None, connection=connection)
-                    return connection, tools
-
-                connection, tools = await asyncio.wait_for(
-                    _connect(), timeout=self._timeout
-                )
-                self._connections[name] = connection
-                self.tools.extend(tools)
-                print(f"✅ MCP 服务器 [{name}] 已连接, 加载 {len(tools)} 个工具")
-            except Exception as e:
-                print(f"⚠️  MCP 服务器 [{name}] 连接失败: {e}")
-
-    async def stop(self) -> None:
-        for name, conn in self._connections.items():
-            try:
-                close = getattr(conn, "close", None)
-                if close:
-                    if asyncio.iscoroutinefunction(close):
-                        await close()
-                    else:
-                        close()
-            except Exception:
-                pass
-        self._connections.clear()
-        self.tools = []
-        print("ℹ️  MCP 连接已释放")
 
 
 def load_env_file(env_file: str = ENV_FILE) -> None:
@@ -572,7 +487,6 @@ def build_agent(
     store=None,
     backend=None,
     extra_middleware: Optional[list[Any]] = None,
-    mcp_tools: Optional[list[Any]] = None,
 ):
     """构建 Deep Agent（DeepSeek 模型）。
 
@@ -641,9 +555,6 @@ def build_agent(
         store = create_memory_store()
     tools_list += _make_memory_tools(store)
     middleware_list.append(LongTermMemoryMiddleware(store))
-    # MCP 外部工具: 由 MCPManager 在服务启动时加载, 全部并入 agent 工具集
-    if mcp_tools:
-        tools_list += list(mcp_tools)
     middleware_list.append(TimeAwarenessMiddleware())  # 日期时间感知
     if extra_middleware:
         middleware_list.extend(extra_middleware)
