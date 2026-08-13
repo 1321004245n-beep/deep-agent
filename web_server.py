@@ -89,14 +89,40 @@ app = FastAPI(title="Deep Agent Web Chat", docs_url=None, redoc_url=None, lifesp
 
 @app.get("/api/mcp-status")
 def mcp_status() -> dict[str, Any]:
-    """MCP 连接状态（供前端显示徽标）。"""
+    """MCP 连接状态（含工具详情, 供前端徽标 + 详情弹窗）。"""
     if not _mcp_manager:
-        return {"enabled": False, "tools": 0, "servers": []}
+        return {"enabled": False, "tools": 0, "servers": [], "details": []}
+    servers: list[dict[str, Any]] = []
+    for name in _mcp_manager._connections:
+        servers.append({"name": name})
     return {
         "enabled": len(_mcp_manager._connections) > 0,
         "tools": len(_mcp_manager.tools),
-        "servers": list(_mcp_manager._connections.keys()),
+        "servers": servers,
+        "details": [_mcp_tool_info(t) for t in _mcp_manager.tools],
     }
+
+
+def _mcp_tool_info(t: Any) -> dict[str, Any]:
+    """提取 MCP 工具的可展示信息（名称/描述/参数）。"""
+    try:
+        schema = getattr(t, "args", None) or {}
+        props = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        required = schema.get("required", []) if isinstance(schema, dict) else []
+        args = {}
+        for k, v in props.items():
+            args[k] = {
+                "type": v.get("type", "") if isinstance(v, dict) else "",
+                "required": k in required,
+                "description": (v.get("description", "") if isinstance(v, dict) else "")[:80],
+            }
+        return {
+            "name": t.name,
+            "description": (t.description or "")[:120],
+            "args": args,
+        }
+    except Exception:
+        return {"name": getattr(t, "name", "?"), "description": "", "args": {}}
 
 
 # ---------------------------------------------------------------------------

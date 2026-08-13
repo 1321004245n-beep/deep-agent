@@ -1144,3 +1144,90 @@ body::after {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+/* ---------- MCP 工具详情弹窗 ---------- */
+.mcp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.mcp-modal[hidden] { display: none; }
+.mcp-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  animation: mcp-fade 0.15s ease;
+}
+@keyframes mcp-fade { from { opacity: 0; } to { opacity: 1; } }
+.mcp-modal-card {
+  position: relative;
+  width: min(560px, 92vw);
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: mcp-pop 0.18s ease;
+}
+@keyframes mcp-pop { from { transform: translateY(10px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.mcp-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.mcp-modal-close {
+  width: 28px; height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mcp-modal-close:hover { background: var(--hover); color: var(--text); }
+.mcp-modal-body {
+  padding: 12px 18px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-modal-empty { color: var(--text-faint); font-size: 13px; text-align: center; padding: 18px 0; }
+.mcp-tool-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+.mcp-tool-name {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.mcp-tool-desc { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+.mcp-tool-args { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.mcp-arg-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.mcp-arg-chip b { color: var(--text); font-weight: 600; }
+.mcp-arg-chip .req { color: var(--danger, #dc2626); }
